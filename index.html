@@ -341,7 +341,24 @@
       </div>
 
       <div id="export-notice" class="notice" style="display:none">미션 영역을 먼저 그려주세요.</div>
-      <button class="btn btn-primary" id="btn-export" onclick="exportKMZ()">KMZ 다운로드</button>
+
+      <div class="section">
+        <div class="section-label">파일 식별자</div>
+        <div class="field">
+          <label>앞 8자리 입력 (영문 대문자/숫자)</label>
+          <input type="text" id="mission-prefix" maxlength="8" placeholder="예: MIHO2606"
+            oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+            style="font-family:monospace;letter-spacing:0.1em">
+          <div class="field-hint">나머지 4-4-4-12자리는 자동 생성됩니다</div>
+        </div>
+        <div class="linked" id="uuid-preview-box" style="display:none">
+          <div class="linked-row">
+            <span class="linked-label" style="font-size:11px;font-family:monospace" id="uuid-preview">—</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-export" onclick="exportPackage()">미션 패키지 다운로드 (.zip)</button>
       <button class="btn btn-secondary" style="margin-top:8px" onclick="exportCSV()">웨이포인트 CSV 다운로드</button>
     </div>
   </div>
@@ -831,6 +848,73 @@ function buildTemplateKML(){
     </wpml:missionConfig>
   </Document>
 </kml>`;
+}
+
+function generateUUIDSuffix(){
+  // 4-4-4-12 자리 대문자+숫자 난수 생성
+  const chars='0123456789ABCDEF';
+  const rand = n => Array.from({length:n}, ()=>chars[Math.floor(Math.random()*16)]).join('');
+  return `${rand(4)}-${rand(4)}-${rand(4)}-${rand(12)}`;
+}
+
+function getMissionID(){
+  const prefix = document.getElementById('mission-prefix').value.trim();
+  if(!prefix || prefix.length < 8){
+    return null;
+  }
+  return `${prefix}-${generateUUIDSuffix()}`;
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const input = document.getElementById('mission-prefix');
+  if(input){
+    input.addEventListener('input', ()=>{
+      const prefix = input.value.trim();
+      const box = document.getElementById('uuid-preview-box');
+      const preview = document.getElementById('uuid-preview');
+      if(prefix.length === 8){
+        box.style.display='block';
+        preview.textContent = `${prefix}-XXXX-XXXX-XXXX-XXXXXXXXXXXX`;
+      } else {
+        box.style.display='none';
+      }
+    });
+  }
+});
+
+async function exportPackage(){
+  if(!waypointsData.length){alert('미션 영역을 먼저 그려주세요.');return;}
+  const prefix = document.getElementById('mission-prefix').value.trim();
+  if(prefix.length !== 8){
+    alert('파일 식별자 8자리를 입력해주세요.\n예: MIHO2606');
+    document.getElementById('mission-prefix').focus();
+    return;
+  }
+  const missionID = `${prefix}-${generateUUIDSuffix()}`;
+
+  // 외부 ZIP (패키지)
+  const outerZip = new JSZip();
+
+  // KMZ 생성 (내부 ZIP)
+  const kmzZip = new JSZip();
+  const wpmz = kmzZip.folder('wpmz');
+  wpmz.file('template.kml', buildTemplateKML());
+  wpmz.file('waylines.wpml', buildWPML());
+  const kmzBlob = await kmzZip.generateAsync({type:'blob', compression:'DEFLATE'});
+
+  // 외부 ZIP 구성
+  outerZip.file(`${missionID}.kmz`, kmzBlob);
+  const imageFolder = outerZip.folder('image');
+  imageFolder.file('ShotSnap.json', '{}');
+
+  // 다운로드
+  const blob = await outerZip.generateAsync({type:'blob', compression:'DEFLATE'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${missionID}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function exportKMZ(){

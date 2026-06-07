@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DJI Mission Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f1117;--bg2:#181c26;--bg3:#1e2330;
+    --border:#2a3040;--border2:#3a4258;
+    --text:#e8eaf0;--text2:#8892a4;--text3:#525d70;
+    --accent:#3b82f6;--accent2:#2563eb;--accent3:#1d4ed8;
+    --green:#22c55e;--amber:#f59e0b;--red:#ef4444;
+    --radius:8px;--radius2:12px;
+  }
+  body{font-family:'Pretendard','Noto Sans KR',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+  header{
+    display:flex;align-items:center;gap:16px;padding:0 20px;height:52px;
+    background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;
+  }
+  header h1{font-size:15px;font-weight:600;letter-spacing:0.02em;color:var(--text)}
+  header .badge{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--accent3);color:#93c5fd;font-weight:500}
+  header .spacer{flex:1}
+  header .stat{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px}
+  header .stat strong{color:var(--text);font-weight:500}
+
+  .layout{display:flex;flex:1;overflow:hidden}
+
+  #map{flex:1;background:#0d111a}
+  .leaflet-container{background:#0d111a}
+
+  .panel{
+    width:300px;flex-shrink:0;background:var(--bg2);border-left:1px solid var(--border);
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+
+  .panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+  .tab{flex:1;padding:10px 0;font-size:12px;font-weight:500;color:var(--text2);
+    text-align:center;cursor:pointer;border:none;background:none;transition:color .15s}
+  .tab.active{color:var(--accent);border-bottom:2px solid var(--accent)}
+  .tab:hover:not(.active){color:var(--text)}
+
+  .tab-content{display:none;flex:1;overflow-y:auto;padding:16px}
+  .tab-content.active{display:block}
+
+  .section{margin-bottom:20px}
+  .section-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px}
+
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12px;color:var(--text2);margin-bottom:5px}
+  .field input,.field select{
+    width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+    color:var(--text);font-size:13px;padding:7px 10px;outline:none;transition:border-color .15s;
+  }
+  .field input:focus,.field select:focus{border-color:var(--accent)}
+  .field select option{background:var(--bg3)}
+
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .field-hint{font-size:11px;color:var(--text3);margin-top:3px}
+
+  .linked{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:12px}
+  .linked-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .linked-row:last-child{margin-bottom:0}
+  .linked-label{font-size:12px;color:var(--text2);flex:1}
+  .linked-val{font-size:13px;font-weight:500;color:var(--text)}
+  .linked-unit{font-size:11px;color:var(--text3)}
+
+  .btn{
+    width:100%;padding:9px;border-radius:var(--radius);border:none;
+    font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;
+  }
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent2)}
+  .btn-primary:active{background:var(--accent3)}
+  .btn-secondary{background:var(--bg3);color:var(--text2);border:1px solid var(--border)}
+  .btn-secondary:hover{color:var(--text);border-color:var(--border2)}
+  .btn-danger{background:transparent;color:var(--red);border:1px solid var(--red)30}
+  .btn-danger:hover{background:var(--red)15}
+  .btn+.btn{margin-top:8px}
+  .btn:disabled{opacity:0.4;cursor:not-allowed}
+
+  .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+  .summary-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px}
+  .summary-card .val{font-size:18px;font-weight:600;color:var(--text);margin-bottom:2px}
+  .summary-card .lbl{font-size:11px;color:var(--text3)}
+
+  .wp-list{display:flex;flex-direction:column;gap:4px}
+  .wp-item{
+    display:flex;align-items:center;gap:8px;padding:7px 10px;
+    background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+    font-size:12px;
+  }
+  .wp-num{width:22px;height:22px;border-radius:50%;background:var(--accent);
+    color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .wp-coords{flex:1;color:var(--text2);font-size:11px;font-family:monospace}
+
+  .notice{
+    background:var(--amber)15;border:1px solid var(--amber)30;border-radius:var(--radius);
+    padding:10px 12px;font-size:12px;color:var(--amber);margin-bottom:12px;line-height:1.5;
+  }
+  .notice-info{background:var(--accent)10;border-color:var(--accent)30;color:#93c5fd}
+
+  .angle-btns{display:flex;gap:6px;margin-bottom:8px}
+  .angle-btn{flex:1;padding:6px;border-radius:var(--radius);border:1px solid var(--border);
+    background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;text-align:center;transition:all .15s}
+  .angle-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent)10}
+
+  .drone-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+  .drone-card{
+    padding:8px;border-radius:var(--radius);border:1px solid var(--border);
+    background:var(--bg3);cursor:pointer;transition:all .15s;
+  }
+  .drone-card.active{border-color:var(--accent);background:var(--accent)10}
+  .drone-card .drone-name{font-size:12px;font-weight:500;color:var(--text)}
+  .drone-card .drone-sub{font-size:10px;color:var(--text3);margin-top:2px}
+
+  .path-preview{
+    position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+    background:var(--bg2)ee;border:1px solid var(--border2);border-radius:var(--radius2);
+    padding:8px 16px;font-size:12px;color:var(--text2);backdrop-filter:blur(8px);
+    display:flex;align-items:center;gap:16px;z-index:1000;pointer-events:none;
+  }
+  .path-preview strong{color:var(--text);font-weight:500}
+
+  .search-wrap{position:relative;display:flex;align-items:center}
+  .search-wrap input{
+    background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+    color:var(--text);font-size:13px;padding:6px 32px 6px 10px;width:220px;outline:none;transition:border-color .15s;
+  }
+  .search-wrap input:focus{border-color:var(--accent)}
+  .search-wrap input::placeholder{color:var(--text3)}
+  .search-btn{position:absolute;right:6px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:14px;padding:2px;line-height:1}
+  .search-btn:hover{color:var(--text)}
+  .search-results{
+    position:absolute;top:calc(100% + 4px);left:0;width:100%;
+    background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);
+    z-index:2000;max-height:200px;overflow-y:auto;display:none;
+  }
+  .search-result-item{padding:8px 12px;font-size:12px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border)}
+  .search-result-item:last-child{border-bottom:none}
+  .search-result-item:hover{background:var(--bg3)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DJI Mission Planner</h1>
+  <span class="badge">WPMZ v1.0.2</span>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <input type="text" id="search-input" placeholder="지역 검색..." onkeydown="if(event.key==='Enter')searchPlace()">
+    <button class="search-btn" onclick="searchPlace()">⌕</button>
+    <div class="search-results" id="search-results"></div>
+  </div>
+  <div class="stat" style="margin-left:16px">웨이포인트 <strong id="hdr-wp">0</strong>개</div>
+  <div class="stat" style="margin-left:16px">총 거리 <strong id="hdr-dist">—</strong></div>
+  <div class="stat" style="margin-left:16px">예상 시간 <strong id="hdr-time">—</strong></div>
+</header>
+
+<div class="layout">
+  <div id="map"></div>
+
+  <div class="panel">
+    <div class="panel-tabs">
+      <button class="tab active" onclick="showTab('setup')">설정</button>
+      <button class="tab" onclick="showTab('flight')">비행 파라미터</button>
+      <button class="tab" onclick="showTab('export')">내보내기</button>
+    </div>
+
+    <!-- 설정 탭 -->
+    <div class="tab-content active" id="tab-setup">
+      <div class="section">
+        <div class="section-label">드론 선택</div>
+        <div class="drone-grid" id="drone-grid"></div>
+        <div id="custom-cam-fields" style="display:none;margin-top:10px">
+          <div class="field-row">
+            <div class="field">
+              <label>센서 가로 (mm)</label>
+              <input type="number" id="cam-fw" value="13.2" step="0.1" min="1" oninput="applyCustomCam()">
+            </div>
+            <div class="field">
+              <label>센서 세로 (mm)</label>
+              <input type="number" id="cam-fh" value="8.8" step="0.1" min="1" oninput="applyCustomCam()">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>실제 초점거리 (mm)</label>
+              <input type="number" id="cam-fl" value="8.8" step="0.01" min="1" oninput="applyCustomCam()">
+            </div>
+            <div class="field">
+              <label>해상도 (px, 가로)</label>
+              <input type="number" id="cam-pw" value="8192" step="1" min="100" oninput="applyCustomCam()">
+            </div>
+          </div>
+          <div class="field">
+            <label>해상도 (px, 세로)</label>
+            <input type="number" id="cam-ph" value="6144" step="1" min="100" oninput="applyCustomCam()">
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">미션 영역</div>
+        <div class="notice notice-info">지도에서 <strong>폴리곤 도구</strong>를 클릭해 촬영 구역을 그리세요.</div>
+        <button class="btn btn-secondary" onclick="clearAll()">영역 초기화</button>
+      </div>
+
+      <div class="section">
+        <div class="section-label">비행 방향</div>
+        <div class="angle-btns">
+          <div class="angle-btn active" onclick="setAnglePreset(0, this)">동→서</div>
+          <div class="angle-btn" onclick="setAnglePreset(90, this)">남→북</div>
+          <div class="angle-btn" onclick="setAnglePreset('custom', this)">직접 입력</div>
+        </div>
+        <div class="field" id="custom-angle-field" style="display:none">
+          <label>비행 각도 (°, 북=0 기준)</label>
+          <input type="number" id="flight-angle" value="0" min="0" max="359" step="1" onchange="regeneratePath()">
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">웨이포인트 목록</div>
+        <div class="wp-list" id="wp-list">
+          <div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">영역을 그리면 자동 생성됩니다</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 비행 파라미터 탭 -->
+    <div class="tab-content" id="tab-flight">
+      <div class="section">
+        <div class="section-label">고도 / GSD</div>
+        <div class="linked">
+          <div class="field" style="margin-bottom:10px">
+            <label>비행 고도 (m, 이륙점 기준)</label>
+            <input type="number" id="altitude" value="120" min="10" max="500" step="1" oninput="syncGSD()">
+          </div>
+          <div class="linked-row">
+            <span class="linked-label">GSD</span>
+            <span class="linked-val" id="gsd-val">—</span>
+            <span class="linked-unit">cm/px</span>
+          </div>
+          <div class="linked-row">
+            <span class="linked-label">라인 간격</span>
+            <span class="linked-val" id="line-spacing-val">—</span>
+            <span class="linked-unit">m</span>
+          </div>
+          <div class="linked-row">
+            <span class="linked-label">인터벌 촬영 시간</span>
+            <span class="linked-val" id="interval-val">—</span>
+            <span class="linked-unit">초</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>GSD 직접 입력 (cm/px)</label>
+          <input type="number" id="gsd-input" step="0.1" min="0.5" max="50" oninput="syncAltFromGSD()">
+          <div class="field-hint">입력 시 고도 자동 계산</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">중첩률</div>
+        <div class="field-row">
+          <div class="field">
+            <label>전방 중첩 (%)</label>
+            <input type="number" id="overlap-front" value="80" min="10" max="95" step="1" onchange="updateInterval();regeneratePath()">
+          </div>
+          <div class="field">
+            <label>측방 중첩 (%)</label>
+            <input type="number" id="overlap-side" value="70" min="10" max="95" step="1" onchange="updateInterval();regeneratePath()">
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">비행 설정</div>
+        <div class="field">
+          <label>비행 속도 (m/s)</label>
+          <input type="number" id="speed" value="6.5" min="1" max="15" step="0.5" oninput="updateTimeOnly()">
+        </div>
+        <div class="field">
+          <label>짐벌 피치 각도 (°)</label>
+          <input type="number" id="gimbal-pitch" value="-90" min="-90" max="30" step="1">
+          <div class="field-hint">-90 = 수직 하향 (정사영상)</div>
+        </div>
+
+        <div class="field">
+          <label>미션 완료 후 동작</label>
+          <select id="finish-action">
+            <option value="goHome" selected>홈 복귀</option>
+            <option value="noAction">제자리 호버링</option>
+            <option value="autoLand">자동 착륙</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">턴 방식</div>
+        <div class="field">
+          <select id="turn-mode">
+            <option value="toPointAndStopWithDiscontinuityCurvature" selected>직선 정지 (기본)</option>
+            <option value="toPointAndPassWithDiscontinuityCurvature">직선 통과</option>
+            <option value="toPointAndStopWithContinuityCurvature">곡선 정지</option>
+            <option value="toPointAndPassWithContinuityCurvature">곡선 통과</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- 내보내기 탭 -->
+    <div class="tab-content" id="tab-export">
+      <div class="section">
+        <div class="section-label">미션 요약</div>
+        <div class="summary-grid">
+          <div class="summary-card"><div class="val" id="sum-wp">0</div><div class="lbl">웨이포인트</div></div>
+          <div class="summary-card"><div class="val" id="sum-dist">—</div><div class="lbl">총 거리 (m)</div></div>
+          <div class="summary-card"><div class="val" id="sum-time">—</div><div class="lbl">예상 시간</div></div>
+          <div class="summary-card"><div class="val" id="sum-area">—</div><div class="lbl">촬영 면적 (ha)</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">드론 / 파라미터</div>
+        <div class="linked">
+          <div class="linked-row"><span class="linked-label">드론</span><span class="linked-val" id="sum-drone">—</span></div>
+          <div class="linked-row"><span class="linked-label">고도</span><span class="linked-val" id="sum-alt">—</span><span class="linked-unit">m</span></div>
+          <div class="linked-row"><span class="linked-label">속도</span><span class="linked-val" id="sum-speed">—</span><span class="linked-unit">m/s</span></div>
+          <div class="linked-row"><span class="linked-label">GSD</span><span class="linked-val" id="sum-gsd">—</span><span class="linked-unit">cm/px</span></div>
+          <div class="linked-row"><span class="linked-label">전방/측방 중첩</span><span class="linked-val" id="sum-overlap">—</span></div>
+          <div class="linked-row"><span class="linked-label">비행 각도</span><span class="linked-val" id="sum-angle">—</span><span class="linked-unit">°</span></div>
+        </div>
+      </div>
+
+      <div id="export-notice" class="notice" style="display:none">미션 영역을 먼저 그려주세요.</div>
+      <button class="btn btn-primary" id="btn-export" onclick="exportKMZ()">KMZ 다운로드</button>
+      <button class="btn btn-secondary" style="margin-top:8px" onclick="exportCSV()">웨이포인트 CSV 다운로드</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DRONES = [
+  {id:60,  sub:0, name:'Mavic 3 Pro', cam:'4/3" 20MP',      fw:17.3, fh:13.0, pw:5280, ph:3956, fl:12.29},
+  {id:89,  sub:0, name:'Mini 4 Pro',  cam:'1/1.3" 48MP',    fw:9.75, fh:7.24, pw:8064, ph:6048, fl:6.72},
+  {id:58,  sub:0, name:'Mini 3 Pro',  cam:'1/1.3" 48MP',    fw:9.75, fh:7.24, pw:8064, ph:6048, fl:6.72},
+  {id:101, sub:0, name:'Mini 5 Pro',  cam:'1" 50MP',        fw:13.2, fh:8.8,  pw:8192, ph:6144, fl:8.8},
+];
+
+let selectedDrone = DRONES[0];
+let currentPolygon = null;
+let pathLayer = null;
+let waypointsData = [];
+let flightAngle = 0;
+
+const map = L.map('map', {zoomControl:true}).setView([37.5665,126.9780], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'© OpenStreetMap contributors', maxZoom:20
+}).addTo(map);
+
+const drawnItems = new L.FeatureGroup().addTo(map);
+const drawControl = new L.Control.Draw({
+  draw:{
+    polygon:{shapeOptions:{color:'#3b82f6',fillColor:'#3b82f6',fillOpacity:0.15,weight:2}},
+    rectangle:{shapeOptions:{color:'#3b82f6',fillColor:'#3b82f6',fillOpacity:0.15,weight:2}},
+    polyline:false, circle:false, circlemarker:false, marker:false
+  },
+  edit:{featureGroup:drawnItems}
+});
+map.addControl(drawControl);
+
+map.on(L.Draw.Event.CREATED, e=>{
+  drawnItems.clearLayers();
+  if(currentPolygon) currentPolygon=null;
+  drawnItems.addLayer(e.layer);
+  currentPolygon = e.layer;
+  regeneratePath();
+});
+map.on(L.Draw.Event.EDITED, ()=>{
+  currentPolygon = drawnItems.getLayers()[0];
+  regeneratePath();
+});
+map.on(L.Draw.Event.DELETED, ()=>{currentPolygon=null; clearWaypoints()});
+
+function initDroneGrid(){
+  const g = document.getElementById('drone-grid');
+  g.innerHTML='';
+  DRONES.forEach((d,i)=>{
+    const el = document.createElement('div');
+    el.className='drone-card'+(i===0?' active':'');
+    el.innerHTML=`<div class="drone-name">${d.name}</div><div class="drone-sub">${d.cam}</div>`;
+    el.onclick=()=>{
+      document.querySelectorAll('.drone-card').forEach(c=>c.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('custom-cam-fields').style.display='none';
+      selectedDrone=d;
+      syncGSD();
+      updateInterval();
+      regeneratePath();
+    };
+    g.appendChild(el);
+  });
+  const customEl = document.createElement('div');
+  customEl.className='drone-card';
+  customEl.style.gridColumn='1/-1';
+  customEl.innerHTML=`<div class="drone-name">직접 입력</div><div class="drone-sub">카메라 스펙 수동 설정</div>`;
+  customEl.onclick=()=>{
+    document.querySelectorAll('.drone-card').forEach(c=>c.classList.remove('active'));
+    customEl.classList.add('active');
+    document.getElementById('custom-cam-fields').style.display='block';
+    applyCustomCam();
+  };
+  g.appendChild(customEl);
+}
+
+function applyCustomCam(){
+  const fw = parseFloat(document.getElementById('cam-fw').value)||13.2;
+  const fh = parseFloat(document.getElementById('cam-fh').value)||8.8;
+  const fl = parseFloat(document.getElementById('cam-fl').value)||8.8;
+  const pw = parseFloat(document.getElementById('cam-pw').value)||8192;
+  const ph = parseFloat(document.getElementById('cam-ph').value)||6144;
+  selectedDrone = {id:0, sub:0, name:'직접 입력', cam:'사용자 정의', fw, fh, fl, pw, ph};
+  syncGSD();
+  updateInterval();
+  regeneratePath();
+}
+
+function showTab(id){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['setup','flight','export'][i]===id));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id==='tab-'+id));
+  if(id==='export') updateSummary();
+}
+
+function setAnglePreset(val, el){
+  document.querySelectorAll('.angle-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  const cf = document.getElementById('custom-angle-field');
+  if(val==='custom'){cf.style.display='block'}
+  else{cf.style.display='none'; flightAngle=val; regeneratePath();}
+}
+
+function getFlightAngle(){
+  const cf = document.getElementById('custom-angle-field');
+  if(cf.style.display!=='none') return parseFloat(document.getElementById('flight-angle').value)||0;
+  return flightAngle;
+}
+
+function calcGSD(alt){
+  const d = selectedDrone;
+  return (d.fw * alt * 100) / (d.fl * d.pw);
+}
+function calcAlt(gsd){
+  const d = selectedDrone;
+  return (gsd * d.fl * d.pw) / (d.fw * 100);
+}
+function calcSwath(alt){
+  const d = selectedDrone;
+  return (d.fw * alt) / d.fl;
+}
+
+function calcInterval(alt){
+  const d = selectedDrone;
+  const swathHeight = (d.fh * alt) / d.fl;
+  const frontOv = parseFloat(document.getElementById('overlap-front').value) / 100 || 0.8;
+  const photoSpacing = swathHeight * (1 - frontOv);
+  const speed = parseFloat(document.getElementById('speed').value) || 6.5;
+  return photoSpacing / speed;
+}
+
+function updateInterval(){
+  const alt = parseFloat(document.getElementById('altitude').value);
+  if(isNaN(alt)) return;
+  const d = selectedDrone;
+  const sideOv = parseFloat(document.getElementById('overlap-side').value) / 100 || 0.7;
+  const lineSpacing = (d.fw * alt / d.fl) * (1 - sideOv);
+  document.getElementById('line-spacing-val').textContent = lineSpacing.toFixed(1);
+  const interval = calcInterval(alt);
+  document.getElementById('interval-val').textContent = interval.toFixed(1);
+}
+
+function syncGSD(){
+  const alt = parseFloat(document.getElementById('altitude').value);
+  if(isNaN(alt)) return;
+  const gsd = calcGSD(alt);
+  document.getElementById('gsd-val').textContent = gsd.toFixed(2);
+  document.getElementById('gsd-input').value = gsd.toFixed(2);
+  updateInterval();
+  regeneratePath();
+}
+
+function syncAltFromGSD(){
+  const gsd = parseFloat(document.getElementById('gsd-input').value);
+  if(isNaN(gsd)) return;
+  const alt = calcAlt(gsd);
+  document.getElementById('altitude').value = alt.toFixed(1);
+  document.getElementById('gsd-val').textContent = gsd.toFixed(2);
+  updateInterval();
+  regeneratePath();
+}
+
+function generateFlightLines(polygonLatLngs, angleRad, frontOverlap, sideOverlap, altitude){
+  const d = selectedDrone;
+  const swathWidth = (d.fw * altitude) / d.fl;
+  const swathHeight = (d.fh * altitude) / d.fl;
+  const lineSpacing = swathWidth * (1 - sideOverlap);
+  const photoSpacing = swathHeight * (1 - frontOverlap);
+
+  const lats = polygonLatLngs.map(p=>p.lat);
+  const lons = polygonLatLngs.map(p=>p.lng);
+  const cLat = (Math.min(...lats)+Math.max(...lats))/2;
+  const cLon = (Math.min(...lons)+Math.max(...lons))/2;
+  const mPerDegLat = 111320;
+  const mPerDegLon = 111320 * Math.cos(cLat*Math.PI/180);
+
+  const pts = polygonLatLngs.map(p=>({
+    x:(p.lng-cLon)*mPerDegLon, y:(p.lat-cLat)*mPerDegLat
+  }));
+
+  const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
+  const rot = pts.map(p=>({x:p.x*cos+p.y*sin, y:-p.x*sin+p.y*cos}));
+  const minX=Math.min(...rot.map(p=>p.x)), maxX=Math.max(...rot.map(p=>p.x));
+  const minY=Math.min(...rot.map(p=>p.y)), maxY=Math.max(...rot.map(p=>p.y));
+
+  const isCW = isClockwise(rot);
+  const lines = [];
+  let leftToRight = true;
+  for(let x=minX+lineSpacing/2; x<=maxX; x+=lineSpacing){
+    const seg = [{x,y:minY-50},{x,y:maxY+50}];
+    const clipped = clipLineToPolygon(seg, rot);
+    if(clipped){
+      const sorted = leftToRight ? clipped : [...clipped].reverse();
+      const latlngs = sorted.map(p=>{
+        const gx=p.x*cos-p.y*sin, gy=p.x*sin+p.y*cos;
+        return {lat:cLat+gy/mPerDegLat, lng:cLon+gx/mPerDegLon};
+      });
+      lines.push(latlngs);
+      leftToRight=!leftToRight;
+    }
+  }
+
+  const wps = [];
+  lines.forEach(line=>{
+    line.forEach(pt=>wps.push({lat:pt.lat,lng:pt.lng}));
+  });
+  return {waypoints:wps, lineSpacing, photoSpacing};
+}
+
+function isClockwise(pts){
+  let s=0;
+  for(let i=0;i<pts.length;i++){const j=(i+1)%pts.length;s+=(pts[j].x-pts[i].x)*(pts[j].y+pts[i].y);}
+  return s>0;
+}
+
+function clipLineToPolygon(seg, poly){
+  const intersections=[];
+  for(let i=0;i<poly.length;i++){
+    const j=(i+1)%poly.length;
+    const p=lineIntersect(seg[0],seg[1],poly[i],poly[j]);
+    if(p) intersections.push(p);
+  }
+  if(intersections.length<2) return null;
+  intersections.sort((a,b)=>a.y-b.y);
+  return [intersections[0],intersections[intersections.length-1]];
+}
+
+function lineIntersect(a1,a2,b1,b2){
+  const d1={x:a2.x-a1.x,y:a2.y-a1.y};
+  const d2={x:b2.x-b1.x,y:b2.y-b1.y};
+  const cross=d1.x*d2.y-d1.y*d2.x;
+  if(Math.abs(cross)<1e-10) return null;
+  const t=((b1.x-a1.x)*d2.y-(b1.y-a1.y)*d2.x)/cross;
+  const u=((b1.x-a1.x)*d1.y-(b1.y-a1.y)*d1.x)/cross;
+  if(t>=0&&t<=1&&u>=0&&u<=1) return {x:a1.x+t*d1.x,y:a1.y+t*d1.y};
+  return null;
+}
+
+function haversineM(lat1,lon1,lat2,lon2){
+  const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function calcPolygonAreaHa(latLngs){
+  if(!window.turf) return 0;
+  const coords = latLngs.map(p=>[p.lng,p.lat]);
+  coords.push(coords[0]);
+  const poly = turf.polygon([coords]);
+  return turf.area(poly)/10000;
+}
+
+function regeneratePath(){
+  if(!currentPolygon){clearWaypoints();return;}
+  const latlngs = currentPolygon.getLatLngs()[0];
+  if(!latlngs||latlngs.length<3){clearWaypoints();return;}
+  const altitude = parseFloat(document.getElementById('altitude').value)||120;
+  const frontOv = parseFloat(document.getElementById('overlap-front').value)/100||0.8;
+  const sideOv = parseFloat(document.getElementById('overlap-side').value)/100||0.7;
+  const angle = getFlightAngle();
+  const angleRad = angle*Math.PI/180;
+  const {waypoints, photoSpacing} = generateFlightLines(latlngs, angleRad, frontOv, sideOv, altitude);
+  waypointsData = waypoints;
+  drawPath(waypoints);
+  updateWPList(waypoints);
+  updateHeader(waypoints);
+}
+
+function drawPath(wps){
+  if(pathLayer){map.removeLayer(pathLayer);}
+  if(!wps.length) return;
+  const latlngs = wps.map(p=>[p.lat,p.lng]);
+  pathLayer = L.layerGroup().addTo(map);
+  L.polyline(latlngs,{color:'#3b82f6',weight:1.5,opacity:0.8}).addTo(pathLayer);
+  wps.forEach((p,i)=>{
+    L.circleMarker([p.lat,p.lng],{
+      radius:i===0?6:3,fillColor:i===0?'#22c55e':'#3b82f6',
+      color:'#fff',weight:1,fillOpacity:1
+    }).addTo(pathLayer);
+  });
+}
+
+function updateWPList(wps){
+  const el=document.getElementById('wp-list');
+  if(!wps.length){el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">웨이포인트 없음</div>';return;}
+  el.innerHTML=wps.slice(0,50).map((p,i)=>`
+    <div class="wp-item">
+      <div class="wp-num">${i}</div>
+      <div class="wp-coords">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
+    </div>`).join('')+(wps.length>50?`<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px">... 외 ${wps.length-50}개</div>`:'');
+}
+
+function fmtTime(seconds){
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}분 ${String(s).padStart(2,'0')}초`;
+}
+
+function updateHeader(wps){
+  let dist=0;
+  for(let i=1;i<wps.length;i++) dist+=haversineM(wps[i-1].lat,wps[i-1].lng,wps[i].lat,wps[i].lng);
+  const speed=parseFloat(document.getElementById('speed').value)||6.5;
+  document.getElementById('hdr-wp').textContent=wps.length;
+  document.getElementById('hdr-dist').textContent=dist>1000?(dist/1000).toFixed(2)+'km':Math.round(dist)+'m';
+  document.getElementById('hdr-time').textContent=fmtTime(dist/speed);
+}
+
+function clearWaypoints(){
+  waypointsData=[];
+  if(pathLayer){map.removeLayer(pathLayer);pathLayer=null;}
+  updateWPList([]);
+  document.getElementById('hdr-wp').textContent='0';
+  document.getElementById('hdr-dist').textContent='—';
+  document.getElementById('hdr-time').textContent='—';
+}
+
+function clearAll(){
+  drawnItems.clearLayers();
+  currentPolygon=null;
+  clearWaypoints();
+}
+
+function updateSummary(){
+  const wps=waypointsData;
+  let dist=0;
+  for(let i=1;i<wps.length;i++) dist+=haversineM(wps[i-1].lat,wps[i-1].lng,wps[i].lat,wps[i].lng);
+  const speed=parseFloat(document.getElementById('speed').value)||6.5;
+  const timeStr=dist?fmtTime(dist/speed):'—';
+  const alt=parseFloat(document.getElementById('altitude').value)||120;
+  const area=currentPolygon?calcPolygonAreaHa(currentPolygon.getLatLngs()[0]).toFixed(2):'—';
+
+  document.getElementById('sum-wp').textContent=wps.length;
+  document.getElementById('sum-dist').textContent=dist?Math.round(dist):'—';
+  document.getElementById('sum-time').textContent=timeStr;
+  document.getElementById('sum-area').textContent=area;
+  document.getElementById('sum-drone').textContent=selectedDrone.name;
+  document.getElementById('sum-alt').textContent=alt;
+  document.getElementById('sum-speed').textContent=speed;
+  document.getElementById('sum-gsd').textContent=calcGSD(alt).toFixed(2);
+  document.getElementById('sum-overlap').textContent=
+    document.getElementById('overlap-front').value+'% / '+document.getElementById('overlap-side').value+'%';
+  document.getElementById('sum-angle').textContent=getFlightAngle();
+
+  const noArea=!currentPolygon||!wps.length;
+  document.getElementById('export-notice').style.display=noArea?'block':'none';
+  document.getElementById('btn-export').disabled=noArea;
+}
+
+function buildWPML(){
+  const wps=waypointsData;
+  const alt=parseFloat(document.getElementById('altitude').value)||120;
+  const speed=parseFloat(document.getElementById('speed').value)||6.5;
+  const transitSpeed=speed;
+  const gimbalPitch=parseFloat(document.getElementById('gimbal-pitch').value)||-90;
+  const turnMode=document.getElementById('turn-mode').value;
+  const finishAction=document.getElementById('finish-action').value;
+
+  let actionGroupId=1, actionId=1;
+  const placemarks=wps.map((p,i)=>{
+    const isFirst=i===0;
+    const isLast=i===wps.length-1;
+    const turnM=i===0?turnMode.replace('Pass','Stop'):
+                i===wps.length-1?turnMode.replace('Pass','Stop'):turnMode;
+    const agStart=actionGroupId++;
+    const aId1=actionId++;
+    const aId2=actionId++;
+
+    const gimbalAction=isFirst?`
+    <wpml:actionGroup>
+      <wpml:actionGroupId>${agStart}</wpml:actionGroupId>
+      <wpml:actionGroupStartIndex>${i}</wpml:actionGroupStartIndex>
+      <wpml:actionGroupEndIndex>${i}</wpml:actionGroupEndIndex>
+      <wpml:actionGroupMode>parallel</wpml:actionGroupMode>
+      <wpml:actionTrigger><wpml:actionTriggerType>reachPoint</wpml:actionTriggerType></wpml:actionTrigger>
+      <wpml:action>
+        <wpml:actionId>${aId1}</wpml:actionId>
+        <wpml:actionActuatorFunc>gimbalRotate</wpml:actionActuatorFunc>
+        <wpml:actionActuatorFuncParam>
+          <wpml:gimbalHeadingYawBase>aircraft</wpml:gimbalHeadingYawBase>
+          <wpml:gimbalRotateMode>absoluteAngle</wpml:gimbalRotateMode>
+          <wpml:gimbalPitchRotateEnable>1</wpml:gimbalPitchRotateEnable>
+          <wpml:gimbalPitchRotateAngle>${gimbalPitch}</wpml:gimbalPitchRotateAngle>
+          <wpml:gimbalRollRotateEnable>0</wpml:gimbalRollRotateEnable>
+          <wpml:gimbalRollRotateAngle>0</wpml:gimbalRollRotateAngle>
+          <wpml:gimbalYawRotateEnable>0</wpml:gimbalYawRotateEnable>
+          <wpml:gimbalYawRotateAngle>0</wpml:gimbalYawRotateAngle>
+          <wpml:gimbalRotateTimeEnable>0</wpml:gimbalRotateTimeEnable>
+          <wpml:gimbalRotateTime>0</wpml:gimbalRotateTime>
+          <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
+        </wpml:actionActuatorFuncParam>
+      </wpml:action>
+    </wpml:actionGroup>`:'';
+
+    const nextIdx=i<wps.length-1?i+1:i;
+    const evenlyId=actionGroupId++;
+    const aId3=actionId++;
+    const evenlyAction=`
+    <wpml:actionGroup>
+      <wpml:actionGroupId>${evenlyId}</wpml:actionGroupId>
+      <wpml:actionGroupStartIndex>${i}</wpml:actionGroupStartIndex>
+      <wpml:actionGroupEndIndex>${nextIdx}</wpml:actionGroupEndIndex>
+      <wpml:actionGroupMode>parallel</wpml:actionGroupMode>
+      <wpml:actionTrigger><wpml:actionTriggerType>reachPoint</wpml:actionTriggerType></wpml:actionTrigger>
+      <wpml:action>
+        <wpml:actionId>${aId3}</wpml:actionId>
+        <wpml:actionActuatorFunc>gimbalEvenlyRotate</wpml:actionActuatorFunc>
+        <wpml:actionActuatorFuncParam>
+          <wpml:gimbalPitchRotateAngle>${gimbalPitch}</wpml:gimbalPitchRotateAngle>
+          <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
+        </wpml:actionActuatorFuncParam>
+      </wpml:action>
+    </wpml:actionGroup>`;
+
+    return `
+  <Placemark>
+    <Point><coordinates>${p.lng},${p.lat}</coordinates></Point>
+    <wpml:index>${i}</wpml:index>
+    <wpml:executeHeight>${alt}</wpml:executeHeight>
+    <wpml:waypointSpeed>${speed}</wpml:waypointSpeed>
+    <wpml:waypointHeadingParam>
+      <wpml:waypointHeadingMode>followWayline</wpml:waypointHeadingMode>
+      <wpml:waypointHeadingAngle>0</wpml:waypointHeadingAngle>
+      <wpml:waypointPoiPoint>0.000000,0.000000,0.000000</wpml:waypointPoiPoint>
+      <wpml:waypointHeadingAngleEnable>0</wpml:waypointHeadingAngleEnable>
+      <wpml:waypointHeadingPathMode>followBadArc</wpml:waypointHeadingPathMode>
+    </wpml:waypointHeadingParam>
+    <wpml:waypointTurnParam>
+      <wpml:waypointTurnMode>${turnM}</wpml:waypointTurnMode>
+      <wpml:waypointTurnDampingDist>0</wpml:waypointTurnDampingDist>
+    </wpml:waypointTurnParam>
+    <wpml:useStraightLine>1</wpml:useStraightLine>
+    ${gimbalAction}${evenlyAction}
+  </Placemark>`;
+  }).join('');
+
+  const now=Date.now();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="http://www.dji.com/wpmz/1.0.2">
+  <Document>
+    <wpml:missionConfig>
+      <wpml:flyToWaylineMode>safely</wpml:flyToWaylineMode>
+      <wpml:finishAction>${finishAction}</wpml:finishAction>
+      <wpml:exitOnRCLost>executeLostAction</wpml:exitOnRCLost>
+      <wpml:executeRCLostAction>hover</wpml:executeRCLostAction>
+      <wpml:globalTransitionalSpeed>${transitSpeed}</wpml:globalTransitionalSpeed>
+      <wpml:droneInfo>
+        <wpml:droneEnumValue>${selectedDrone.id}</wpml:droneEnumValue>
+        <wpml:droneSubEnumValue>${selectedDrone.sub}</wpml:droneSubEnumValue>
+      </wpml:droneInfo>
+    </wpml:missionConfig>
+    <Folder>
+      <wpml:templateId>0</wpml:templateId>
+      <wpml:executeHeightMode>relativeToStartPoint</wpml:executeHeightMode>
+      <wpml:waylineId>0</wpml:waylineId>
+      <wpml:distance>0</wpml:distance>
+      <wpml:duration>0</wpml:duration>
+      <wpml:autoFlightSpeed>${transitSpeed}</wpml:autoFlightSpeed>
+      ${placemarks}
+    </Folder>
+  </Document>
+</kml>`;
+}
+
+function buildTemplateKML(){
+  const finishAction=document.getElementById('finish-action').value;
+  const speed=parseFloat(document.getElementById('speed').value)||6.5;
+  const transitSpeed=speed;
+  const now=Date.now();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="http://www.dji.com/wpmz/1.0.2">
+  <Document>
+    <wpml:author>DJI Mission Planner</wpml:author>
+    <wpml:createTime>${now}</wpml:createTime>
+    <wpml:updateTime>${now}</wpml:updateTime>
+    <wpml:missionConfig>
+      <wpml:flyToWaylineMode>safely</wpml:flyToWaylineMode>
+      <wpml:finishAction>${finishAction}</wpml:finishAction>
+      <wpml:exitOnRCLost>executeLostAction</wpml:exitOnRCLost>
+      <wpml:executeRCLostAction>hover</wpml:executeRCLostAction>
+      <wpml:globalTransitionalSpeed>${transitSpeed}</wpml:globalTransitionalSpeed>
+      <wpml:droneInfo>
+        <wpml:droneEnumValue>${selectedDrone.id}</wpml:droneEnumValue>
+        <wpml:droneSubEnumValue>${selectedDrone.sub}</wpml:droneSubEnumValue>
+      </wpml:droneInfo>
+    </wpml:missionConfig>
+  </Document>
+</kml>`;
+}
+
+async function exportKMZ(){
+  if(!waypointsData.length){alert('미션 영역을 먼저 그려주세요.');return;}
+  const zip=new JSZip();
+  const wpmz=zip.folder('wpmz');
+  wpmz.file('template.kml', buildTemplateKML());
+  wpmz.file('waylines.wpml', buildWPML());
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`mission_${selectedDrone.name.replace(/\s/g,'_')}_${Date.now()}.kmz`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function exportCSV(){
+  if(!waypointsData.length){alert('미션 영역을 먼저 그려주세요.');return;}
+  const alt=document.getElementById('altitude').value;
+  const speed=document.getElementById('speed').value;
+  const rows=['index,latitude,longitude,altitude_m,speed_ms'];
+  waypointsData.forEach((p,i)=>rows.push(`${i},${p.lat.toFixed(8)},${p.lng.toFixed(8)},${alt},${speed}`));
+  const blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='waypoints.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function updateTimeOnly(){
+  if(!waypointsData.length) return;
+  let dist=0;
+  for(let i=1;i<waypointsData.length;i++)
+    dist+=haversineM(waypointsData[i-1].lat,waypointsData[i-1].lng,waypointsData[i].lat,waypointsData[i].lng);
+  const speed=parseFloat(document.getElementById('speed').value)||6.5;
+  document.getElementById('hdr-time').textContent=fmtTime(dist/speed);
+  updateInterval();
+}
+
+async function searchPlace(){
+  const q = document.getElementById('search-input').value.trim();
+  if(!q) return;
+  const res = document.getElementById('search-results');
+  res.style.display='block';
+  res.innerHTML='<div class="search-result-item" style="color:var(--text3)">검색 중...</div>';
+  try{
+    const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&accept-language=ko`);
+    const data = await resp.json();
+    if(!data.length){
+      res.innerHTML='<div class="search-result-item" style="color:var(--text3)">결과 없음</div>';
+      return;
+    }
+    res.innerHTML = data.map(d=>`
+      <div class="search-result-item" onclick="goToPlace(${d.lat},${d.lon},'${d.display_name.replace(/'/g,"\\'")}')">
+        ${d.display_name}
+      </div>`).join('');
+  } catch(e){
+    res.innerHTML='<div class="search-result-item" style="color:var(--red)">검색 실패</div>';
+  }
+}
+
+function goToPlace(lat, lon, name){
+  map.setView([lat, lon], 15);
+  document.getElementById('search-input').value = name.split(',')[0];
+  document.getElementById('search-results').style.display='none';
+}
+
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.search-wrap'))
+    document.getElementById('search-results').style.display='none';
+});
+
+initDroneGrid();
+syncGSD();
+updateInterval();
+</script>
+</body>
+</html>

@@ -10,7 +10,6 @@
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-<script src="https://unpkg.com/leaflet-arrowheads@1.4.0/src/leaflet-arrowheads.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   :root{
@@ -618,9 +617,23 @@ function drawPath(wps){
   if(!wps.length) return;
   const latlngs = wps.map(p=>[p.lat,p.lng]);
   pathLayer = L.layerGroup().addTo(map);
-  L.polyline(latlngs,{color:'#ff414a',weight:1.5,opacity:0.8})
-   .arrowheads({size:'10px', frequency:'allvertices', fill:true, color:'#ff414a'})
-   .addTo(pathLayer);
+  L.polyline(latlngs,{color:'#ff414a',weight:1.5,opacity:0.8}).addTo(pathLayer);
+
+  // 화살표: 각 구간 중간에 방향 표시
+  for(let i=0;i<wps.length-1;i++){
+    const p1=wps[i], p2=wps[i+1];
+    const midLat=(p1.lat+p2.lat)/2;
+    const midLng=(p1.lng+p2.lng)/2;
+    const angle=Math.atan2(p2.lng-p1.lng, p2.lat-p1.lat)*180/Math.PI;
+    const arrowIcon = L.divIcon({
+      html:`<div style="transform:rotate(${angle}deg);color:#ff414a;font-size:12px;line-height:1;">▲</div>`,
+      className:'',
+      iconSize:[12,12],
+      iconAnchor:[6,6]
+    });
+    L.marker([midLat,midLng],{icon:arrowIcon,interactive:false}).addTo(pathLayer);
+  }
+
   wps.forEach((p,i)=>{
     L.circleMarker([p.lat,p.lng],{
       radius:i===0?6:3,fillColor:i===0?'#22c55e':'#3b82f6',

@@ -271,8 +271,10 @@
      <div class="section">
         <div class="section-label">비행 방향</div>
         <div class="angle-btns">
-          <div class="angle-btn active" onclick="setAnglePreset(0, this)">동→서</div>
-          <div class="angle-btn" onclick="setAnglePreset(90, this)">남→북</div>
+          <div class="angle-btn active" onclick="setAnglePreset(0, this)">남→북</div>
+          <div class="angle-btn" onclick="setAnglePreset(180, this)">북→남</div>
+          <div class="angle-btn" onclick="setAnglePreset(270, this)">동→서</div>
+          <div class="angle-btn" onclick="setAnglePreset(90, this)">서→북</div>
           <div class="angle-btn" onclick="setAnglePreset('custom', this)">직접 입력</div>
         </div>
         <div class="field" id="custom-angle-field" style="display:none">
@@ -604,7 +606,7 @@ function regeneratePath(){
   const frontOv = parseFloat(document.getElementById('overlap-front').value)/100||0.8;
   const sideOv = parseFloat(document.getElementById('overlap-side').value)/100||0.7;
   const angle = getFlightAngle();
-  const angleRad = angle*Math.PI/180;
+  const angleRad = -angle*Math.PI/180;
   const {waypoints, photoSpacing} = generateFlightLines(latlngs, angleRad, frontOv, sideOv, altitude);
   waypointsData = waypoints;
   drawPath(waypoints);

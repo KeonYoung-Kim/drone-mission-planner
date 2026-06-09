@@ -619,7 +619,7 @@ function drawPath(wps){
   const latlngs = wps.map(p=>[p.lat,p.lng]);
   pathLayer = L.layerGroup().addTo(map);
   L.polyline(latlngs,{color:'#ff414a',weight:1.5,opacity:0.8})
-   .arrowheade({size:'10px', frequency:'allvertices', fill:true, color:'#ff414a'})
+   .arrowheads({size:'10px', frequency:'allvertices', fill:true, color:'#ff414a'})
    .addTo(pathLayer);
   wps.forEach((p,i)=>{
     L.circleMarker([p.lat,p.lng],{

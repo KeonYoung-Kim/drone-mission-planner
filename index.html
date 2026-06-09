@@ -10,6 +10,7 @@
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://unpkg.com/leaflet-arrowheads@1.4.0/src/leaflet-arrowheads.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   :root{
@@ -215,19 +216,6 @@
       </div>
 
       <div class="section">
-        <div class="section-label">비행 방향</div>
-        <div class="angle-btns">
-          <div class="angle-btn active" onclick="setAnglePreset(0, this)">동→서</div>
-          <div class="angle-btn" onclick="setAnglePreset(90, this)">남→북</div>
-          <div class="angle-btn" onclick="setAnglePreset('custom', this)">직접 입력</div>
-        </div>
-        <div class="field" id="custom-angle-field" style="display:none">
-          <label>비행 각도 (°, 북=0 기준)</label>
-          <input type="number" id="flight-angle" value="0" min="0" max="359" step="1" onchange="regeneratePath()">
-        </div>
-      </div>
-
-      <div class="section">
         <div class="section-label">웨이포인트 목록</div>
         <div class="wp-list" id="wp-list">
           <div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">영역을 그리면 자동 생성됩니다</div>
@@ -281,6 +269,19 @@
         </div>
       </div>
 
+     <div class="section">
+        <div class="section-label">비행 방향</div>
+        <div class="angle-btns">
+          <div class="angle-btn active" onclick="setAnglePreset(0, this)">동→서</div>
+          <div class="angle-btn" onclick="setAnglePreset(90, this)">남→북</div>
+          <div class="angle-btn" onclick="setAnglePreset('custom', this)">직접 입력</div>
+        </div>
+        <div class="field" id="custom-angle-field" style="display:none">
+          <label>비행 각도 (°, 북=0 기준)</label>
+          <input type="number" id="flight-angle" value="0" min="0" max="359" step="1" onchange="regeneratePath()">
+        </div>
+      </div>
+     
       <div class="section">
         <div class="section-label">비행 설정</div>
         <div class="field">
@@ -617,7 +618,9 @@ function drawPath(wps){
   if(!wps.length) return;
   const latlngs = wps.map(p=>[p.lat,p.lng]);
   pathLayer = L.layerGroup().addTo(map);
-  L.polyline(latlngs,{color:'#3b82f6',weight:1.5,opacity:0.8}).addTo(pathLayer);
+  L.polyline(latlngs,{color:'#ff414a',weight:1.5,opacity:0.8})
+   .arrowheade({size:'10px', frequency:'allvertices', fill:true, color:'#ff414a'})
+   .addTo(pathLayer);
   wps.forEach((p,i)=>{
     L.circleMarker([p.lat,p.lng],{
       radius:i===0?6:3,fillColor:i===0?'#22c55e':'#3b82f6',
